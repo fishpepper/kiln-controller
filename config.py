@@ -20,9 +20,9 @@ listening_port = 8081
 # This is used to calculate a cost estimate before a run. It's also used
 # to produce the actual cost during a run. My kiln has three
 # elements that when my switches are set to high, consume 9460 watts.
-kwh_rate        = 0.1319  # cost per kilowatt hour per currency_type to calculate cost to run job
+kwh_rate        = 0.3  # cost per kilowatt hour per currency_type to calculate cost to run job
 kw_elements     = 9.460 # if the kiln elements are on, the wattage in kilowatts
-currency_type   = "$"   # Currency Symbol to show when calculating cost to run job
+currency_type   = "€"   # Currency Symbol to show when calculating cost to run job
 
 ########################################################################
 #
@@ -85,11 +85,14 @@ currency_type   = "$"   # Currency Symbol to show when calculating cost to run j
 try:
     import board
     spi_sclk  = board.D17    #spi clock
-    spi_miso  = board.D27    #spi Microcomputer In Serial Out
-    spi_cs    = board.D22    #spi Chip Select
-    spi_mosi  = board.D10    #spi Microcomputer Out Serial In (not connected) 
-    gpio_heat = board.D23    #output that controls relay
+    spi_miso  = board.D10    #spi Microcomputer In Serial Out
+    spi_cs    = board.D27    #spi Chip Select
+    spi_mosi  = board.D9    #spi Microcomputer Out Serial In (not connected) 
+# relais: D26 D6 D22 D4
+    #gpio_safety = board.D26
+    gpio_heat = board.D4    #output that controls relay
     gpio_heat_invert = False #invert the output state
+    gpio_emergency = board.D26 #output rhat controls emergency relay
 except (NotImplementedError,AttributeError):
     print("not running on blinka recognized board, probably a simulation")
 
@@ -99,11 +102,12 @@ except (NotImplementedError,AttributeError):
 # There are only two breakoutboards supported. 
 #   max31855 - only supports type K thermocouples
 #   max31856 - supports many thermocouples
-max31855 = 1
-max31856 = 0
+max31855 = 0
+max31856 = 1
 # uncomment these two lines if using MAX-31856
 import adafruit_max31856
-thermocouple_type = adafruit_max31856.ThermocoupleType.K
+thermocouple_type = adafruit_max31856.ThermocoupleType.S
+# was S
 
 # here are the possible max-31856 thermocouple types
 #   ThermocoupleType.B
@@ -155,7 +159,7 @@ stop_integral_windup = True
 ########################################################################
 #
 #   Simulation parameters
-simulate = True
+simulate = False
 sim_t_env      = 65   # deg
 sim_c_heat     = 500.0  # J/K  heat capacity of heat element
 sim_c_oven     = 5000.0 # J/K  heat capacity of oven
@@ -176,7 +180,7 @@ sim_speedup_factor = 1
 #
 # If you change the temp_scale, all settings in this file are assumed to
 # be in that scale.
-temp_scale          = "f" # c = Celsius | f = Fahrenheit - Unit to display
+temp_scale          = "c" # c = Celsius | f = Fahrenheit - Unit to display
 time_scale_slope    = "h" # s = Seconds | m = Minutes | h = Hours - Slope displayed in temp_scale per time_scale_slope
 time_scale_profile  = "m" # s = Seconds | m = Minutes | h = Hours - Enter and view target time in time_scale_profile
 
@@ -214,7 +218,7 @@ thermocouple_offset=0
 temperature_average_samples = 10 
 
 # Thermocouple AC frequency filtering - set to True if in a 50Hz locale, else leave at False for 60Hz locale
-ac_freq_50hz = False
+ac_freq_50hz = True
 
 ########################################################################
 # Emergencies - or maybe not
@@ -243,7 +247,7 @@ ignore_tc_unknown_error = False
 
 # This overrides all possible thermocouple errors and prevents the 
 # process from exiting.
-ignore_tc_too_many_errors = False
+ignore_tc_too_many_errors = False 
 
 ########################################################################
 # automatic restarts - if you have a power brown-out and the raspberry pi
@@ -276,4 +280,4 @@ kiln_profiles_directory = os.path.abspath(os.path.join(os.path.dirname( __file__
 # of the elements are used max.
 # To prevent throttling, set throttle_percent to 100.
 throttle_below_temp = 300
-throttle_percent = 20
+throttle_percent = 80
