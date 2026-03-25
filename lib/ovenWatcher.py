@@ -11,12 +11,18 @@ class MQTTPublisher:
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.connected = False
+        self.client.loop_start()
         log.info("MQTT connecting to %s:%d, base_topic=%s" % (host, port, base_topic))
-        try:
-            self.client.connect(host, port)
-            self.client.loop_start()
-        except Exception as e:
-            log.error("MQTT connection failed: %s" % e)
+        retries = 5
+        for attempt in range(1, retries + 1):
+            try:
+                self.client.connect(host, port)
+                return
+            except Exception as e:
+                log.error("MQTT connection attempt %d/%d failed: %s" % (attempt, retries, e))
+                if attempt < retries:
+                    time.sleep(5)
+        log.error("MQTT could not connect after %d attempts, will keep retrying in background" % retries)
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
