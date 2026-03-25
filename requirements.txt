@@ -23,3 +23,10 @@ adafruit-circuitpython-bitbangio
 
 # untested - for mcp9600 and mcp9601
 #adafruit-circuitpython-mcp9600
+
+# for MQTT publishing of kiln state
+paho-mqtt
+
+# for SDM72 power meter via modbus
+sdm_modbus
+pymodbus<3.9.2

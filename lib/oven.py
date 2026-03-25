@@ -3,12 +3,19 @@ import time
 import datetime
 import logging
 import json
+import struct
 import config
 import os
+import sys
 import digitalio
 import busio
 import adafruit_bitbangio as bitbangio
 import statistics
+from pymodbus.client import ModbusSerialClient
+from pymodbus.exceptions import ModbusException
+from serial import SerialException
+import sdm_modbus
+
 
 log = logging.getLogger(__name__)
 
@@ -77,19 +84,72 @@ class RealBoard(Board):
     '''
     def __init__(self):
         self.name = None
+        self.modbus_client = None
+        self.meter = None
+        self.modbus_lock = threading.Lock()
         self.load_libs()
+        self.init_meter()
         self.temp_sensor = self.choose_tempsensor()
-        Board.__init__(self) 
+        Board.__init__(self)
 
     def load_libs(self):
         import board
         self.name = board.board_id
+
+    def init_meter(self):
+        """If modbus meter is enabled, create SDM72 which owns the serial connection."""
+        if not config.modbus_meter_enabled:
+            return
+        port = config.modbus_port
+        log.info(f"modbus meter: SDM72 on {port} at {config.modbus_baudrate}, slave {config.modbus_meter_slave}")
+        self.meter = sdm_modbus.SDM72(
+            device=port,
+            baud=config.modbus_baudrate,
+            stopbits=1,
+            parity="N",
+            timeout=0.3,
+            unit=config.modbus_meter_slave,
+        )
+        if not self.meter.connected():
+            print(f"ERROR: MODBUS - could not connect to {port}", file=sys.stderr)
+            sys.exit(1)
+        self.modbus_client = self.meter.client
 
     def choose_tempsensor(self):
         if config.max31855:
             return Max31855()
         if config.max31856:
             return Max31856()
+        if config.modbus:
+            if self.modbus_client:
+                self.client = self.modbus_client
+            else:
+                port = config.modbus_port
+                log.info(f"modbus: using {port} at {config.modbus_baudrate}")
+                self.client = ModbusSerialClient(
+                    port=port,
+                    baudrate=config.modbus_baudrate,
+                    bytesize=8,
+                    parity="N",
+                    stopbits=1,
+                    timeout=0.3,
+                )
+                if not self.client.connect():
+                    print(f"ERROR: MODBUS - could not connect to {port}", file=sys.stderr)
+                    sys.exit(1)
+
+            return TemperatureModbus(self.client, config.modbus_thermo_reg, config.modbus_thermo_slave, self.modbus_lock)
+
+    def read_meter(self):
+        if self.meter is None:
+            return {}
+        with self.modbus_lock:
+            try:
+                return self.meter.read_all(sdm_modbus.registerType.INPUT)
+            except Exception as e:
+                log.error("meter read error: %s" % e)
+                return {}
+
 
 class SimulatedBoard(Board):
     '''Simulated board used during simulations.
@@ -98,7 +158,10 @@ class SimulatedBoard(Board):
     def __init__(self):
         self.name = "simulated"
         self.temp_sensor = TempSensorSimulated()
-        Board.__init__(self) 
+        Board.__init__(self)
+
+    def read_meter(self):
+        return {}
 
 class TempSensor(threading.Thread):
     '''Used by the Board class. Each Board must have
@@ -184,11 +247,8 @@ class TempTracker(object):
             del self.temps[0]
 
     def get_avg_temp(self, chop=25):
-        '''
-        take the median of the given values. this used to take an avg
-        after getting rid of outliers. median works better.
-        '''
-        return statistics.median(self.temps)
+        '''average the sampled temperatures'''
+        return statistics.mean(self.temps)
 
 class ThermocoupleTracker(object):
     '''Keeps sliding window to track successful/failed calls to get temp
@@ -304,6 +364,95 @@ class Max31856_Error(ThermocoupleError):
             "open_tc"  : "not connected"
             }
         super().__init__(message)
+
+class TemperatureModbus_Error(ThermocoupleError):
+    def __init__(self, message):
+        self.orig_message = message
+        self.map = {
+                "modbus": "modbus error",
+                "serial": "modbus serial error",
+                "value":  "modbus value error",
+                "tc1_high": "thermocouple temp too high",
+                "tc1_low" : "thermocouple temp too low",
+                "tc1_nan" : "thermocouple returned NaN",
+                "tc1 error" : "not connected",
+            }
+        super().__init__(message)
+
+
+TC_TYPES = {
+    0: "TYPE_J",
+    1: "TYPE_K",
+    2: "TYPE_T",
+    3: "TYPE_N",
+    4: "TYPE_E",
+    5: "TYPE_B",
+    6: "TYPE_R",
+    7: "TYPE_S",
+}
+
+class TemperatureModbus(TempSensorReal):
+    '''each subclass expected to handle errors and get temperature'''
+    def __init__(self, modbus_client, reg, slave, lock=None):
+        self.client = modbus_client
+        self.reg = reg
+        self.slave = slave
+        self.lock = lock or threading.Lock()
+        TempSensorReal.__init__(self)
+        log.info(f"thermocouple modbus, using reg {reg} at slave {slave}")
+        self.verify_tc_type()
+
+    def verify_tc_type(self):
+        """Read TC type from device register 2100 and compare with config."""
+        TC_TYPE_REG = 2100
+        with self.lock:
+            result = self.client.read_holding_registers(TC_TYPE_REG, count=1, slave=self.slave)
+        if result.isError():
+            log.error(f"Could not read TC type from register {TC_TYPE_REG}: {result}")
+            sys.exit(1)
+
+        device_tc_val = result.registers[0]
+        device_tc_type = TC_TYPES.get(device_tc_val, f"UNKNOWN({device_tc_val})")
+        config_tc_type = config.modbus_thermo_type
+
+        log.info(f"Device TC type: {device_tc_type}, config: {config_tc_type}")
+
+        if device_tc_type != config_tc_type:
+            log.error(f"Thermocouple type mismatch! Device: {device_tc_type}, config: {config_tc_type}")
+            log.error(f"Update config.modbus_thermo_type or reconfigure the device.")
+            sys.exit(1)
+
+        log.info(f"Thermocouple type verified: {device_tc_type}")
+
+    def raw_temp(self):
+        with self.lock:
+            result = self.client.read_holding_registers(self.reg, count=2, slave=self.slave)
+        try:
+            if not result.isError():
+                registers = result.registers
+                raw = struct.pack(">HH", registers[0], registers[1])
+                value = struct.unpack(">f", raw)[0]
+
+                log.info(f"modbus got temp: {value}")
+
+                import math
+                if math.isnan(value):
+                    raise TemperatureModbus_Error("tc1_nan")
+                if value > 1500.0:
+                    raise TemperatureModbus_Error("tc1_high")
+                if value < -10.0:
+                    raise TemperatureModbus_Error("tc1_low")
+
+                return value
+        except ModbusException as e:
+            log.error(f"modbus exception: {e}")
+            raise TemperatureModbus_Error("modbus")
+        except SerialException as e:
+            log.error(f"serial exception: {e}")
+            raise TemperatureModbus_Error("serial")
+        except (ValueError, struct.error) as e:
+            log.error(f"decode error: {e}")
+            raise TemperatureModbus_Error("value")
 
 class Max31856(TempSensorReal):
     '''each subclass expected to handle errors and get temperature'''

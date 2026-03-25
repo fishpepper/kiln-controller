@@ -1,6 +1,66 @@
 import threading,logging,json,time,datetime
+import config
 from oven import Oven
 log = logging.getLogger(__name__)
+
+class MQTTPublisher:
+    def __init__(self, host, port, base_topic):
+        import paho.mqtt.client as mqtt
+        self.base_topic = base_topic
+        self.client = mqtt.Client()
+        self.client.on_connect = self._on_connect
+        self.client.on_disconnect = self._on_disconnect
+        self.connected = False
+        log.info("MQTT connecting to %s:%d, base_topic=%s" % (host, port, base_topic))
+        try:
+            self.client.connect(host, port)
+            self.client.loop_start()
+        except Exception as e:
+            log.error("MQTT connection failed: %s" % e)
+
+    def _on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            self.connected = True
+            log.info("MQTT connected to broker")
+        else:
+            log.error("MQTT connection refused, rc=%d" % rc)
+
+    def _on_disconnect(self, client, userdata, rc):
+        self.connected = False
+        if rc != 0:
+            log.warning("MQTT unexpected disconnect, will auto-reconnect")
+
+    def publish(self, topic, value):
+        """Generic publish to any topic. Use this for future extensibility."""
+        log.info("MQTT publish %s = %s" % (topic, value))
+        try:
+            self.client.publish(topic, payload=str(value), qos=0)
+        except Exception as e:
+            log.error("MQTT publish error: %s" % e)
+
+    def publish_state(self, state):
+        """Publish configured fields from oven state to sub-topics.
+        Derives on/off/power/temp from raw state and pidstats."""
+        pidstats = state.get('pidstats', {})
+        power = pidstats.get('out', 0.0) if pidstats else 0.0
+        time_step = config.sensor_time_wait
+
+        field_map = {
+            'target': float(state.get('target', 0)),
+            'temp': float(state.get('temperature', 0)),
+            'power': float(power),
+            'on': float(time_step * power),
+            'off': float(time_step * (1 - power)),
+        }
+
+        for field in config.mqtt_fields:
+            if field in field_map:
+                self.publish("%s/%s" % (self.base_topic, field), f"{field_map[field]:.2f}")
+
+    def publish_meter(self, meter, meter_data):
+        """Publish SDM72 meter data to MQTT with register-aware formatting."""
+        for k, v in meter_data.items():
+            self.publish("%s/%s" % (config.mqtt_powermeter_topic, k), f"{v:.2f}")
 
 class OvenWatcher(threading.Thread):
     def __init__(self,oven):
@@ -9,6 +69,9 @@ class OvenWatcher(threading.Thread):
         self.started = None
         self.recording = False
         self.observers = []
+        self.mqtt = None
+        if config.mqtt_enabled:
+            self.mqtt = MQTTPublisher(config.mqtt_host, config.mqtt_port, config.mqtt_base_topic)
         threading.Thread.__init__(self)
         self.daemon = True
         self.oven = oven
@@ -32,6 +95,12 @@ class OvenWatcher(threading.Thread):
             else:
                 self.recording = False
             self.notify_all(oven_state)
+            if self.mqtt:
+                self.mqtt.publish_state(oven_state)
+                if config.modbus_meter_enabled:
+                    meter_data = self.oven.board.read_meter()
+                    if meter_data:
+                        self.mqtt.publish_meter(self.oven.board.meter, meter_data)
             time.sleep(self.oven.time_step)
 
     def lastlog_subset(self,maxpts=50):

@@ -103,7 +103,18 @@ except (NotImplementedError,AttributeError):
 #   max31855 - only supports type K thermocouples
 #   max31856 - supports many thermocouples
 max31855 = 0
-max31856 = 1
+max31856 = 0
+modbus = 1
+modbus_port = "/dev/ttyUSB0"
+modbus_baudrate = 9600
+modbus_thermo_slave = 1
+modbus_thermo_reg   = 100
+modbus_thermo_type  = "TYPE_S"
+
+# Modbus power meter (SDM72 on same bus as thermocouple)
+modbus_meter_enabled = True
+modbus_meter_slave = 2
+
 # uncomment these two lines if using MAX-31856
 import adafruit_max31856
 thermocouple_type = adafruit_max31856.ThermocoupleType.S
@@ -215,7 +226,7 @@ thermocouple_offset=0
 # The larger the number, the more load on the board. K type 
 # thermocouples have a precision of about 1/2 degree C. 
 # The median of these samples is used for the temperature.
-temperature_average_samples = 10 
+temperature_average_samples = 1 #10 
 
 # Thermocouple AC frequency filtering - set to True if in a 50Hz locale, else leave at False for 60Hz locale
 ac_freq_50hz = True
@@ -271,6 +282,19 @@ automatic_restart_state_file = os.path.abspath(os.path.join(os.path.dirname( __f
 kiln_profiles_directory = os.path.abspath(os.path.join(os.path.dirname( __file__ ),"storage", "profiles")) 
 #kiln_profiles_directory = os.path.abspath(os.path.join(os.path.dirname( __file__ ),'..','kiln-profiles','pottery')) 
 
+
+########################################################################
+# MQTT Publishing
+# Publishes kiln state to individual MQTT sub-topics every cycle.
+# e.g. kiln/temp kiln/target, etc.
+# mqtt_fields controls which keys from the oven state dict are published.
+# Available fields: target, temp, on, off, power
+mqtt_enabled = True
+mqtt_host = "multiplus.fritz.box"
+mqtt_port = 1883
+mqtt_base_topic = "kiln"
+mqtt_fields = ["target", "temp", "on", "off", "power"]
+mqtt_powermeter_topic = "kiln/powermeter"
 
 ########################################################################
 # low temperature throttling of elements
