@@ -144,7 +144,7 @@ seek_start = True
 # Every N seconds a decision is made about switching the relay[s] 
 # on & off and for how long. The thermocouple is read 
 # temperature_average_samples times during and the average value is used.
-sensor_time_wait = 2
+sensor_time_wait = 10
 
 
 ########################################################################
@@ -223,10 +223,10 @@ pid_control_window = 5 #degrees
 thermocouple_offset=0
 
 # number of samples of temperature to take over each duty cycle.
-# The larger the number, the more load on the board. K type 
-# thermocouples have a precision of about 1/2 degree C. 
-# The median of these samples is used for the temperature.
-temperature_average_samples = 10 
+# The larger the number, the more load on the board. K type
+# thermocouples have a precision of about 1/2 degree C.
+# The average of these samples is used for the temperature.
+temperature_average_samples = 10
 
 # Thermocouple AC frequency filtering - set to True if in a 50Hz locale, else leave at False for 60Hz locale
 ac_freq_50hz = True
