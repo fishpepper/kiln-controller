@@ -512,22 +512,24 @@ class Oven(threading.Thread):
         return startat
 
     def set_heat_rate(self,runtime,temp):
-        '''heat rate is the heating rate in degrees/hour
-        '''
-        # arbitrary number of samples
-        # the time this covers changes based on a few things
+        '''heat rate via least-squares linear regression, in degrees/hour'''
         numtemps = 60
         self.heat_rate_temps.append((runtime,temp))
-         
-        # drop old temps off the list
+
         if len(self.heat_rate_temps) > numtemps:
-            self.heat_rate_temps = self.heat_rate_temps[-1*numtemps:]
-        time2 = self.heat_rate_temps[-1][0]
-        time1 = self.heat_rate_temps[0][0]
-        temp2 = self.heat_rate_temps[-1][1]
-        temp1 = self.heat_rate_temps[0][1]
-        if time2 > time1:
-            self.heat_rate = ((temp2 - temp1) / (time2 - time1))*3600
+            self.heat_rate_temps = self.heat_rate_temps[-numtemps:]
+
+        n = len(self.heat_rate_temps)
+        if n < 2:
+            return
+        times = [s[0] for s in self.heat_rate_temps]
+        temps = [s[1] for s in self.heat_rate_temps]
+        t_mean = sum(times) / n
+        temp_mean = sum(temps) / n
+        num = sum((t - t_mean) * (v - temp_mean) for t, v in self.heat_rate_temps)
+        den = sum((t - t_mean) ** 2 for t in times)
+        if den > 0:
+            self.heat_rate = (num / den) * 3600
 
     def run_profile(self, profile, startat=0, allow_seek=True):
         log.debug('run_profile run on thread' + threading.current_thread().name)
@@ -625,6 +627,12 @@ class Oven(threading.Thread):
 
         self.set_heat_rate(self.runtime,temp)
 
+        target_heat_rate = 0
+        if self.profile and self.runtime <= self.totaltime:
+            (prev_point, next_point) = self.profile.get_surrounding_points(self.runtime)
+            if next_point[0] != prev_point[0]:
+                target_heat_rate = ((next_point[1] - prev_point[1]) / (next_point[0] - prev_point[0])) * 3600
+
         state = {
             'cost': self.cost,
             'runtime': self.runtime,
@@ -633,6 +641,7 @@ class Oven(threading.Thread):
             'state': self.state,
             'heat': self.heat,
             'heat_rate': self.heat_rate,
+            'target_heat_rate': target_heat_rate,
             'totaltime': self.totaltime,
             'kwh_rate': config.kwh_rate,
             'currency_type': config.currency_type,

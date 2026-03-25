@@ -57,6 +57,8 @@ class MQTTPublisher:
             'power': float(power),
             'on': float(time_step * power),
             'off': float(time_step * (1 - power)),
+            'heat_rate': float(state.get('heat_rate', 0)),
+            'target_heat_rate': float(state.get('target_heat_rate', 0)),
         }
 
         for field in config.mqtt_fields:

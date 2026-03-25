@@ -286,12 +286,12 @@ kiln_profiles_directory = os.path.abspath(os.path.join(os.path.dirname( __file__
 # Publishes kiln state to individual MQTT sub-topics every cycle.
 # e.g. kiln/temp kiln/target, etc.
 # mqtt_fields controls which keys from the oven state dict are published.
-# Available fields: target, temp, on, off, power
+# Available fields: target, temp, on, off, power, heat_rate, target_heat_rate
 mqtt_enabled = True
 mqtt_host = "multiplus.fritz.box"
 mqtt_port = 1883
 mqtt_base_topic = "kiln"
-mqtt_fields = ["target", "temp", "on", "off", "power"]
+mqtt_fields = ["target", "temp", "on", "off", "power", "heat_rate", "target_heat_rate"]
 mqtt_powermeter_topic = "kiln/powermeter"
 
 ########################################################################
