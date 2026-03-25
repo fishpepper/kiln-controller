@@ -49,7 +49,7 @@ class MQTTPublisher:
         Derives on/off/power/temp from raw state and pidstats."""
         pidstats = state.get('pidstats', {})
         power = pidstats.get('out', 0.0) if pidstats else 0.0
-        time_step = config.sensor_time_wait
+        time_step = config.pid_cycle_time
 
         field_map = {
             'target': float(state.get('target', 0)),

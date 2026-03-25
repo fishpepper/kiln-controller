@@ -170,7 +170,7 @@ class TempSensor(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.daemon = True
-        self.time_step = config.sensor_time_wait
+        self.time_step = config.pid_cycle_time
         self.status = ThermocoupleTracker()
 
 class TempSensorSimulated(TempSensor):
@@ -182,15 +182,12 @@ class TempSensorSimulated(TempSensor):
         return self.simulated_temperature
 
 class TempSensorReal(TempSensor):
-    '''real temperature sensor that takes many measurements
-       during the time_step
-       inputs
-           config.temperature_average_samples 
-    '''
+    '''real temperature sensor that samples continuously
+       and averages over a sliding time window'''
     def __init__(self):
         TempSensor.__init__(self)
-        self.sleeptime = self.time_step / float(config.temperature_average_samples)
-        self.temptracker = TempTracker() 
+        self.sleeptime = config.temperature_sample_interval
+        self.temptracker = TempTracker()
         self.spi_setup()
         self.cs = digitalio.DigitalInOut(config.spi_cs)
 
@@ -234,29 +231,29 @@ class TempSensorReal(TempSensor):
             time.sleep(self.sleeptime)
 
 class TempTracker(object):
-    '''creates a sliding window of N temperatures per
-       config.sensor_time_wait
-    '''
+    '''time-based sliding window of temperature samples'''
     def __init__(self):
-        self.size = config.temperature_average_samples
-        self.temps = [0 for i in range(self.size)]
-  
-    def add(self,temp):
-        self.temps.append(temp)
-        while(len(self.temps) > self.size):
-            del self.temps[0]
+        self.window = config.temperature_average_window
+        self.samples = []  # list of (timestamp, temp)
 
-    def get_avg_temp(self, chop=25):
-        '''average the sampled temperatures'''
-        return statistics.mean(self.temps)
+    def add(self, temp):
+        now = time.time()
+        self.samples.append((now, temp))
+        cutoff = now - self.window
+        self.samples = [(t, v) for t, v in self.samples if t >= cutoff]
+
+    def get_avg_temp(self):
+        if not self.samples:
+            return 0
+        return statistics.mean(v for _, v in self.samples)
 
 class ThermocoupleTracker(object):
     '''Keeps sliding window to track successful/failed calls to get temp
        over the last two duty cycles.
     '''
     def __init__(self):
-        self.size = config.temperature_average_samples * 2 
-        self.status = [True for i in range(self.size)]
+        self.size = max(int(config.temperature_average_window / config.temperature_sample_interval) * 2, 10)
+        self.status = [True for _ in range(self.size)]
         self.limit = 30
 
     def good(self):
@@ -486,7 +483,7 @@ class Oven(threading.Thread):
         threading.Thread.__init__(self)
         self.daemon = True
         self.temperature = 0
-        self.time_step = config.sensor_time_wait
+        self.time_step = config.pid_cycle_time
         self.reset()
 
     def reset(self):

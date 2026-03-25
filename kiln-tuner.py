@@ -43,12 +43,12 @@ def recordprofile(csvfile, targettemp):
     # * wait for it to decay back to the target again.
     # * quit
     #
-    # We record the temperature every config.sensor_time_wait
+    # We record the temperature every config.pid_cycle_time
     try:
 
         # heating to target of 400F
         temp = 0
-        sleepfor = config.sensor_time_wait
+        sleepfor = config.pid_cycle_time
         stage = "heating"
         while(temp <= targettemp):
             if config.simulate:

@@ -139,12 +139,9 @@ seek_start = True
 
 ########################################################################
 #
-# duty cycle of the entire system in seconds
-# 
-# Every N seconds a decision is made about switching the relay[s] 
-# on & off and for how long. The thermocouple is read 
-# temperature_average_samples times during and the average value is used.
-sensor_time_wait = 10
+# PID control loop cycle time in seconds.
+# Every N seconds the PID computes and switches the relay on/off.
+pid_cycle_time = 2
 
 
 ########################################################################
@@ -222,11 +219,12 @@ pid_control_window = 5 #degrees
 # cheap thermocouple.  Invest in a better thermocouple.
 thermocouple_offset=0
 
-# number of samples of temperature to take over each duty cycle.
-# The larger the number, the more load on the board. K type
-# thermocouples have a precision of about 1/2 degree C.
-# The average of these samples is used for the temperature.
-temperature_average_samples = 10
+# Seconds between individual sensor reads (should match sensor capability).
+temperature_sample_interval = 1
+
+# Sliding window in seconds over which temperature samples are averaged.
+# Longer window = smoother reading but slower response to real changes.
+temperature_average_window = 10
 
 # Thermocouple AC frequency filtering - set to True if in a 50Hz locale, else leave at False for 60Hz locale
 ac_freq_50hz = True
@@ -268,7 +266,7 @@ ignore_tc_too_many_errors = False
 # automatically on boot-up for this to work.
 # DO NOT put automatic_restart_state_file anywhere in /tmp. It could be
 # cleaned up (deleted) by the OS on boot.
-# The state file is written to disk every sensor_time_wait seconds (2s by default)
+# The state file is written to disk every pid_cycle_time seconds (2s by default)
 # and is written in the same directory as config.py.
 automatic_restarts = True
 automatic_restart_window = 15 # max minutes since power outage
