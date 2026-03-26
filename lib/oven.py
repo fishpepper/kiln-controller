@@ -520,15 +520,7 @@ class Oven(threading.Thread):
             self.heat_rate_temps = self.heat_rate_temps[-numtemps:]
 
         n = len(self.heat_rate_temps)
-        if n < 2:
-            return
-
-        # unfiltered two-point slope until window is full
         if n < numtemps:
-            time1, temp1 = self.heat_rate_temps[0]
-            time2, temp2 = self.heat_rate_temps[-1]
-            if time2 > time1:
-                self.heat_rate = ((temp2 - temp1) / (time2 - time1)) * 3600
             return
 
         times = [s[0] for s in self.heat_rate_temps]
