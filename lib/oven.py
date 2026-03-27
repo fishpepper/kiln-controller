@@ -495,7 +495,7 @@ class Oven(threading.Thread):
         self.totaltime = 0
         self.target = 0
         self.heat = 0
-        self.heat_rate = 0
+        self.heat_rate = -1
         self.heat_rate_temps = []
         self.pid = PID(ki=config.pid_ki, kd=config.pid_kd, kp=config.pid_kp)
         self.catching_up = False
@@ -520,6 +520,9 @@ class Oven(threading.Thread):
             self.heat_rate_temps = self.heat_rate_temps[-numtemps:]
 
         n = len(self.heat_rate_temps)
+        log.debug("heat_rate: filling %d/%d samples, array: %s" %
+            (n, numtemps, [(round(t,1), round(v,1)) for t, v in self.heat_rate_temps]))
+            
         if n < numtemps:
             return
 
@@ -531,6 +534,9 @@ class Oven(threading.Thread):
         den = sum((t - t_mean) ** 2 for t in times)
         if den > 0:
             self.heat_rate = (num / den) * 3600
+
+        log.debug("heat_rate: n=%d t_range=%.1f-%.1f temp_range=%.1f-%.1f slope=%.1f deg/h den=%.4f" %
+            (n, times[0], times[-1], min(temps), max(temps), self.heat_rate, den))
 
     def run_profile(self, profile, startat=0, allow_seek=True):
         log.debug('run_profile run on thread' + threading.current_thread().name)
