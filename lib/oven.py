@@ -520,7 +520,7 @@ class Oven(threading.Thread):
             self.heat_rate_temps = self.heat_rate_temps[-numtemps:]
 
         n = len(self.heat_rate_temps)
-        log.debug("heat_rate: filling %d/%d samples, array: %s" %
+        log.info("heat_rate: filling %d/%d samples, array: %s" %
             (n, numtemps, [(round(t,1), round(v,1)) for t, v in self.heat_rate_temps]))
             
         if n < numtemps:
@@ -535,7 +535,7 @@ class Oven(threading.Thread):
         if den > 0:
             self.heat_rate = (num / den) * 3600
 
-        log.debug("heat_rate: n=%d t_range=%.1f-%.1f temp_range=%.1f-%.1f slope=%.1f deg/h den=%.4f" %
+        log.info("heat_rate: n=%d t_range=%.1f-%.1f temp_range=%.1f-%.1f slope=%.1f deg/h den=%.4f" %
             (n, times[0], times[-1], min(temps), max(temps), self.heat_rate, den))
 
     def run_profile(self, profile, startat=0, allow_seek=True):
