@@ -514,6 +514,10 @@ class Oven(threading.Thread):
     def set_heat_rate(self,runtime,temp):
         '''heat rate via least-squares linear regression, in degrees/hour'''
         numtemps = 60
+        if temp <= 0:
+            return
+        if self.heat_rate_temps and self.heat_rate_temps[-1][0] == runtime:
+            return
         self.heat_rate_temps.append((runtime,temp))
 
         if len(self.heat_rate_temps) > numtemps:
