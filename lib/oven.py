@@ -526,7 +526,7 @@ class Oven(threading.Thread):
             self.heat_rate_temps = self.heat_rate_temps[-numtemps:]
 
         n = len(self.heat_rate_temps)
-        if n < numtemps:
+        if n < 10:
             return
 
         times = [s[0] for s in self.heat_rate_temps]
