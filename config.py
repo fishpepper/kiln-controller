@@ -154,7 +154,12 @@ pid_cycle_time = 2
 # inverted so that a smaller number means more integral action.
 pid_kp = 10 # 10   # Proportional 25,200,200
 pid_ki = 120 # 80   # Integral
-pid_kd = 500 #220.83497910261562 # Derivative
+pid_kd = 50 # 500 amplified sensor spikes into relay chatter # Derivative
+
+# The derivative is taken from the measured temperature (not the error)
+# and low-pass filtered with this time constant in seconds. Larger values
+# reject more sensor noise but react later.
+pid_kd_filter_time = 10
 
 ########################################################################
 #
@@ -211,7 +216,7 @@ kiln_must_catch_up = True
 # or 100% off because the kiln is too hot. No integral builds up
 # outside the window. The bigger you make the window, the more
 # integral you will accumulate. This should be a positive integer.
-pid_control_window = 5 #degrees
+pid_control_window = 10 #degrees
 
 # thermocouple offset
 # If you put your thermocouple in ice water and it reads 36F, you can
@@ -224,6 +229,8 @@ temperature_sample_interval = 1
 
 # Sliding window in seconds over which temperature samples are averaged.
 # Longer window = smoother reading but slower response to real changes.
+# The median of the window is used, so single-sample spikes (e.g. EMI
+# when the relay switches) are rejected instead of skewing the average.
 temperature_average_window = 10
 
 # Thermocouple AC frequency filtering - set to True if in a 50Hz locale, else leave at False for 60Hz locale

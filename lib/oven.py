@@ -245,7 +245,9 @@ class TempTracker(object):
     def get_avg_temp(self):
         if not self.samples:
             return 0
-        return statistics.mean(v for _, v in self.samples)
+        # median instead of mean: a single outlier sample must not
+        # shift the reading (seen as +-35 deg spikes on relay switching)
+        return statistics.median(v for _, v in self.samples)
 
 class ThermocoupleTracker(object):
     '''Keeps sliding window to track successful/failed calls to get temp
@@ -983,6 +985,8 @@ class PID():
         self.lastNow = datetime.datetime.now()
         self.iterm = 0
         self.lastErr = 0
+        self.lastInput = None
+        self.dInputFiltered = 0
         self.pidstats = {}
 
     # FIX - this was using a really small window where the PID control
@@ -1005,6 +1009,17 @@ class PID():
         output = 0
         out4logs = 0
         dErr = 0
+
+        # derivative on measurement (no kick from setpoint changes),
+        # low-pass filtered so sensor noise is not amplified by kd.
+        # updated every cycle so it is valid when entering the window.
+        if self.lastInput is not None and timeDelta > 0:
+            dInput = (ispoint - self.lastInput) / timeDelta
+            tau = getattr(config, 'pid_kd_filter_time', 0)
+            alpha = timeDelta / (tau + timeDelta)
+            self.dInputFiltered += alpha * (dInput - self.dInputFiltered)
+        self.lastInput = ispoint
+
         if error < (-1 * config.pid_control_window):
             log.info("kiln outside pid control window, max cooling")
             output = 0
@@ -1019,8 +1034,10 @@ class PID():
                     log.info("max heating throttled at %d percent below %d degrees to prevent overshoot" % (config.throttle_percent,config.throttle_below_temp))
         else:
             icomp = (error * timeDelta * (1/self.ki))
-            self.iterm += (error * timeDelta * (1/self.ki))
-            dErr = (error - self.lastErr) / timeDelta
+            self.iterm += icomp
+            # anti windup: the integral alone can never exceed full output
+            self.iterm = sorted([-1 * window_size, self.iterm, window_size])[1]
+            dErr = -self.dInputFiltered
             output = self.kp * error + self.iterm + self.kd * dErr
             output = sorted([-1 * window_size, output, window_size])[1]
             out4logs = output
